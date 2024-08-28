@@ -43,7 +43,14 @@ contributionCreate() {
     git clone -b $branch $repo_url $2/source
     (cd $2/source; git checkout -b $1)
     
-    touch $2/mldev.meta
+    # Save current project id
+    
+    # Get new id by incrementing the last one
+    last_id=`cat ~/.config/mldev/last_project_id 2> /dev/null || echo 0`
+    current_id=$((last_id + 1))
+    echo "$current_id" > ~/.config/mldev/last_project_id
+    
+    echo $current_id > $2/mldev.meta
 }
 
 contributionCommit() {
