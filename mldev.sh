@@ -79,6 +79,100 @@ contributionPush() {
     (cd source; git push || git push --set-upstream origin $(git rev-parse --abbrev-ref HEAD))
 }
 
+dbStart() {
+    if [ ! -f mldev.meta ]; then
+        echo "You need to execute this command in the main directory of a project"
+        echo "See https://docs.moonlightpanel.xyz/ for more details"
+        exit 1
+    fi
+    
+    id=`cat mldev.meta`
+    port=$((id + 3000))
+    name="ml_dev_$id"
+    
+    if ! sudo docker ps -a | grep -q "$name"; then
+        sudo docker run -d --add-host=host.docker.internal:host-gateway --publish 0.0.0.0:${port}:3306 --name ${name} -v ${name}:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=${name} -e MYSQL_DATABASE=${name} -e MYSQL_USER=${name} -e MYSQL_PASSWORD=${name} mysql:latest
+    fi
+    
+    sudo docker start $name
+    
+    if [ ! -f mldev.plugin.meta ]; then
+        mkdir -p source/Moonlight/ApiServer/storage
+        dbSetup "source/Moonlight/ApiServer/storage/config.json" $name $port
+    else
+        mkdir -p Moonlight/Moonlight/ApiServer/storage
+        dbSetup "Moonlight/Moonlight/ApiServer/storage/config.json" $name $port
+    fi
+}
+
+dbStop() {
+    if [ ! -f mldev.meta ]; then
+        echo "You need to execute this command in the main directory of a project"
+        echo "See https://docs.moonlightpanel.xyz/ for more details"
+        exit 1
+    fi
+    
+    id=`cat mldev.meta`
+    name="ml_dev_$id"
+    
+    sudo docker stop $name
+}
+
+dbRestart() {
+    if [ ! -f mldev.meta ]; then
+        echo "You need to execute this command in the main directory of a project"
+        echo "See https://docs.moonlightpanel.xyz/ for more details"
+        exit 1
+    fi
+    
+    id=`cat mldev.meta`
+    name="ml_dev_$id"
+    
+    sudo docker restart $name
+}
+
+dbDelete() {
+    if [ ! -f mldev.meta ]; then
+        echo "You need to execute this command in the main directory of a project"
+        echo "See https://docs.moonlightpanel.xyz/ for more details"
+        exit 1
+    fi
+    
+    id=`cat mldev.meta`
+    name="ml_dev_$id"
+    
+    sudo docker stop $name
+    sudo docker container rm $name
+    sudo docker volume rm $name
+}
+
+replace_json_property() {
+    local json_file="$1"
+    local prop_name="$2"
+    local new_value="$3"
+
+    # Read the entire JSON file
+    local content=$(jq '.' "$json_file")
+
+    # Replace the property value
+    local replaced_content=$(echo "$content" | jq ".${prop_name} = $new_value")
+
+    # Write the modified content back to the file
+    echo "$replaced_content" > "$json_file"
+}
+
+dbSetup() {
+    if [ ! -f $1 ]; then
+        echo -e "{\n  \"Database\": {\n    \"Host\": \"dev-server\",\n    \"Port\": 3301,\n    \"Username\": \"ml_dev_1\",\n    \"Password\": \"ml_dev_1\",\n    \"Database\": \"ml_dev_1\"\n  }\n}" > $1
+    fi
+    
+    replace_json_property $1 "Database.Host" "\"localhost\""
+    replace_json_property $1 "Database.Port" $3
+    replace_json_property $1 "Database.Username" "\"$2\""
+    replace_json_property $1 "Database.Password" "\"$2\""
+    replace_json_property $1 "Database.Database" "\"$2\""
+}
+
 pluginCreate() {
     if [ "$#" -lt 2 ]; then
         echo "Usage: mldev plugin create <name> <path> (branch)"
@@ -205,6 +299,22 @@ case $module in
             pluginRun
         elif [ "$command" == "publish" ]; then
             pluginPublish
+        else
+            echo "Unknown command '$command' in module '$module'"
+        fi
+
+        
+        ;;
+    db)
+        
+        if [ "$command" == "start" ]; then
+            dbStart
+        elif [ "$command" == "stop" ]; then
+            dbStop
+        elif [ "$command" == "restart" ]; then
+            dbRestart
+        elif [ "$command" == "delete" ]; then
+            dbDelete
         else
             echo "Unknown command '$command' in module '$module'"
         fi
